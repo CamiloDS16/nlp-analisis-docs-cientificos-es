@@ -1,0 +1,16 @@
+# Archivos que DVC debe ignorar al calcular checksums
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# macOS
+.DS_Store
+
+# Entornos
+venv/
+.venv/

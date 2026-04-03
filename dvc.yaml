@@ -1,0 +1,44 @@
+stages:
+  # ── Preprocesamiento ────────────────────────────────────────────────────────
+  preprocess:
+    cmd: python src/preprocessing.py
+    deps:
+      - src/preprocessing.py
+      - data/raw/
+    outs:
+      - data/processed/
+
+  # ── Etiquetado Task 1 ───────────────────────────────────────────────────────
+  label_task1:
+    cmd: python src/etiquetado_heuristico.py --task 1
+    deps:
+      - src/etiquetado_heuristico.py
+      - data/processed/
+    outs:
+      - data/processed/task1/
+
+  # ── Etiquetado Task 2 ───────────────────────────────────────────────────────
+  label_task2:
+    cmd: python src/etiquetado_heuristico.py --task 2
+    deps:
+      - src/etiquetado_heuristico.py
+      - data/processed/
+    outs:
+      - data/processed/task2/
+
+  # ── Entrenamiento Task 1 ────────────────────────────────────────────────────
+  train_task1:
+    cmd: python src/train.py --task 1
+    deps:
+      - data/processed/task1/train/
+      - data/processed/task1/val/
+    outs:
+      - models/task1/
+
+  # ── Entrenamiento Task 2 ────────────────────────────────────────────────────
+  train_task2:
+    cmd: python src/train.py --task 2
+    deps:
+      - data/processed/task2/train/
+    outs:
+      - models/task2/

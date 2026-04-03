@@ -1,0 +1,24 @@
+# ── Acceso a Google Drive ─────────────────────────────────────────────────────
+google-api-python-client
+google-auth
+google-auth-httplib2
+google-auth-oauthlib
+
+# ── Datos y cómputo ───────────────────────────────────────────────────────────
+pandas
+numpy
+pyarrow
+
+# ── Control de versiones de datos ─────────────────────────────────────────────
+dvc[gdrive]
+
+# ── ML y NLP ──────────────────────────────────────────────────────────────────
+scikit-learn
+transformers
+torch
+datasets
+spacy
+
+# ── Utilidades ────────────────────────────────────────────────────────────────
+tqdm
+jupyter
