@@ -52,3 +52,4 @@ models/**/*.safetensors
 # ── Archivos locales de referencia (no van al repo) ───────────────────────────
 notebooks/*-ORIGINAL.ipynb
 .claude/
+notebooks/02_etiquetado_task1.ipynb
