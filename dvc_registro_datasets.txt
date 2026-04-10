@@ -1,0 +1,47 @@
+REGISTRO DE DATASETS EN DVC — TAREA 1
+======================================
+
+Quién lo ejecuta: TÚ, desde tu máquina local (NO desde Colab).
+Cuándo: después de correr el notebook en Colab y tener los parquets descargados de Drive.
+
+PASO 1 — Descargar los archivos de Drive a tu máquina
+------------------------------------------------------
+Descarga manualmente desde drive.google.com (o con rclone si lo tienes configurado):
+
+  camilo_dataset_A.parquet
+  camilo_dataset_B.parquet
+
+PASO 2 — Copiar al repo local
+------------------------------
+Desde la raíz del repo:
+
+  cp ~/Downloads/camilo_dataset_A.parquet data/processed/task1/
+  cp ~/Downloads/camilo_dataset_B.parquet data/processed/task1/
+
+PASO 3 — Registrar con DVC
+---------------------------
+  dvc add data/processed/task1/camilo_dataset_A.parquet
+  dvc add data/processed/task1/camilo_dataset_B.parquet
+
+Esto genera archivos .dvc (punteros) y actualiza .gitignore automáticamente.
+
+PASO 4 — Commitear los punteros
+--------------------------------
+  git add data/processed/task1/camilo_dataset_A.parquet.dvc
+  git add data/processed/task1/camilo_dataset_B.parquet.dvc
+  git add data/processed/task1/.gitignore
+  git commit -m "agregar datasets LIM y CONC tarea 1"
+  git push
+
+PASO 5 — Subir los datos al remote de DVC (Google Drive)
+---------------------------------------------------------
+  dvc push
+
+Esto sube los parquets reales a Google Drive compartido del equipo.
+Los demás pueden descargarlos con: dvc pull
+
+NOTAS
+-----
+- Los archivos .parquet nunca van directamente a git (están en .gitignore).
+- Solo los archivos .dvc (punteros de texto) van al repo.
+- Si el equipo clona el repo y corre "dvc pull", obtiene los parquets exactos.
