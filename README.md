@@ -157,7 +157,7 @@ dvc pull
 
 ## Equipo
 
-- Jesus Vilardi
+- Jesús Vilardi 
 - Camilo Durango
-- Mateo (apellido pendiente)
-- Sergio (apellido pendiente)
+- Mateo Gúzman
+- Sergio Angarita
