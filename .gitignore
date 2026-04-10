@@ -41,6 +41,9 @@ models/**/*.safetensors
 # ── macOS ─────────────────────────────────────────────────────────────────────
 .DS_Store
 
+# ── Archivos de uso personal (no van al repo) ────────────────────────────────
+como_correr_notebook_colab.txt
+
 # ── Miscelánea ────────────────────────────────────────────────────────────────
 *.log
 *.tmp
