@@ -1,0 +1,45 @@
+<View>
+  <Style>
+    .container { font-family: Arial, sans-serif; }
+    .meta { background: #f0f4ff; padding: 10px; border-radius: 6px; margin-bottom: 12px; font-size: 13px; }
+    .meta b { color: #2c5282; }
+    .auto-label { display: inline-block; padding: 3px 10px; border-radius: 4px; font-weight: bold; font-size: 13px; }
+    .LIM  { background: #fed7d7; color: #c53030; }
+    .CONC { background: #c6f6d5; color: #276749; }
+  </Style>
+
+  <View className="container">
+
+    <!-- Metadatos del fragmento -->
+    <View className="meta">
+      <Labels name="meta_label" toName="text">
+      </Labels>
+      <Header value="Fragmento: $fragmento_id" />
+      <Header value="Documento: $doc_id  |  Palabras: $num_palabras" />
+      <Header value="Etiqueta automática: $etiqueta_auto" />
+    </View>
+
+    <!-- Texto del fragmento -->
+    <Text name="text" value="$text" />
+
+    <!-- Pregunta principal -->
+    <Header value="¿Cuál es la función retórica de este fragmento?" />
+    <Choices name="etiqueta" toName="text" choice="single" required="true"
+             showInline="false">
+      <Choice value="INTRO" hint="Presenta el problema, motivación y objetivos del trabajo"/>
+      <Choice value="BACK"  hint="Estado del arte, trabajos previos, contexto teórico"/>
+      <Choice value="METH"  hint="Diseño experimental, métodos, datos, procedimientos"/>
+      <Choice value="RES"   hint="Resultados obtenidos, sin interpretación extensiva"/>
+      <Choice value="DISC"  hint="Interpretación de resultados, implicaciones, comparación"/>
+      <Choice value="CONTR" hint="Aportes explícitos del trabajo"/>
+      <Choice value="LIM"   hint="Restricciones, supuestos, limitaciones de generalización"/>
+      <Choice value="CONC"  hint="Resumen de hallazgos y trabajo futuro"/>
+      <Choice value="OTRO"  hint="No corresponde a ninguna categoría anterior"/>
+    </Choices>
+
+    <!-- Campo libre para comentarios opcionales -->
+    <Header value="Comentario (opcional):" />
+    <TextArea name="comentario" toName="text" placeholder="Si cambiaste la etiqueta, explica brevemente por qué." rows="2" />
+
+  </View>
+</View>
