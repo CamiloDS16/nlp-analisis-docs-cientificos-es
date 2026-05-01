@@ -131,3 +131,18 @@ dvc pull
 - Python 3.10+
 - Transformers (Hugging Face)
 - DVC con remote en Google Drive
+
+---
+
+## Mock de despliegue
+
+El repositorio incluye un demostrador Streamlit en `demo/` para validar la experiencia de despliegue antes de conectar modelos reales. El mock funciona como dashboard porque el objetivo del proyecto es explorar predicciones, comparar arquitecturas y revisar cualitativamente decisiones de los modelos frente a la misma entrada textual.
+
+Para ejecutarlo:
+
+```bash
+pip install -r requirements.txt
+streamlit run demo/app.py
+```
+
+La documentacion completa del mock esta en `demo/README.md`.
