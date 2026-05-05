@@ -1,0 +1,539 @@
+PLN FLAG LAB — RESUMEN TÉCNICO COMPLETO DEL PROYECTO
+Autor: Camilo Durango
+Fecha: Mayo 2026
+Universidad de los Andes — Maestría en Inteligencia Artificial
+========================================================================
+
+
+════════════════════════════════════════════════════════════
+1. CONTEXTO Y OBJETIVO DEL PROYECTO
+════════════════════════════════════════════════════════════
+
+El proyecto construye un sistema de NLP para analizar documentos científicos escritos en español. Se divide en dos tareas:
+
+TAREA 1 — Segmentación retórica
+Clasificar cada fragmento de un paper en una de 8 etiquetas que representan su función dentro del discurso científico:
+  • INTRO  — Introducción: presenta el problema, motivación y objetivos
+  • BACK   — Antecedentes: describe trabajos previos y revisión de literatura
+  • METH   — Metodología: explica el diseño experimental, datos y procedimientos
+  • RES    — Resultados: presenta hallazgos empíricos sin interpretación extensa
+  • DISC   — Discusión: interpreta resultados y compara con la literatura
+  • CONTR  — Contribución: declara explícitamente los aportes originales del trabajo
+  • LIM    — Limitaciones: describe restricciones, supuestos o trabajo futuro
+  • CONC   — Conclusiones: resume hallazgos y presenta conclusiones finales
+
+TAREA 2 — Detección de contribuciones científicas
+Clasificación binaria: ¿el fragmento declara explícitamente una contribución original?
+  • CONTR = 1 (sí es contribución)
+  • no-CONTR = 0 (resultados, metodología, discusión, etc.)
+
+CORPUS FUENTE
+Se usó CORE (core.ac.uk), repositorio de papers académicos de acceso abierto.
+Se descargaron ~60.000 documentos en español para extraer fragmentos anotables automáticamente mediante etiquetado con Gemini.
+
+
+════════════════════════════════════════════════════════════
+2. DATASET TAREA 1 — LO QUE CONSTRUIMOS
+════════════════════════════════════════════════════════════
+
+ESTRUCTURA DE CADA FILA
+Cada fila del dataset representa un fragmento de paper con los siguientes campos:
+  • doc_id       — identificador numérico del documento fuente
+  • filename     — nombre del archivo original (.txt)
+  • text         — el texto del fragmento (250–999 palabras)
+  • label        — etiqueta retórica (INTRO, BACK, METH, RES, DISC, CONTR, LIM, CONC)
+  • dataset_type — partición (TRAIN, TEST, EVAL)
+
+REGLA DE WORD COUNT
+Todos los fragmentos deben tener entre 250 y 999 palabras. El enunciado lo exige explícitamente.
+Fragmentos más cortos no tienen suficiente contexto retórico para clasificar.
+Fragmentos más largos suelen mezclar varias secciones — contaminan la etiqueta.
+
+REGLA DE PARTICIONES SIN LEAKAGE
+Ningún doc_id puede aparecer en EVAL y al mismo tiempo en TRAIN o TEST.
+Si un fragmento del mismo paper aparece en entrenamiento y en evaluación, el modelo
+ya "vio" ese texto — las métricas de evaluación serían falsas.
+
+DISTRIBUCIÓN FINAL — Dataset_consolidado_v3_LIM2000.csv (17.033 filas)
+
+  Etiqueta   TRAIN    TEST    EVAL    Total
+  ─────────────────────────────────────────
+  BACK        1458     622     226     2306
+  CONC        1262     538     200     2000
+  CONTR       1398     598     192     2188
+  DISC        1398     600     229     2227
+  INTRO       1387     591     259     2237
+  LIM         1292     524     184     2000
+  METH        1268     543     202     2013
+  RES         1298     557     207     2062
+  ─────────────────────────────────────────
+  TOTAL      10761    4573    1699    17033
+
+LIM tenía 1924 fragmentos. Agregamos 76 desde los parquets del corpus para llegar a 2000.
+Todos los demás labels se dejaron exactamente como los entregó el equipo (Sergio y Mateo).
+Ningún doc_id cruzó la frontera EVAL ↔ TRAIN/TEST. Coupling = 0 en todos los labels.
+
+
+════════════════════════════════════════════════════════════
+3. ERRORES CRÍTICOS QUE ENCONTRAMOS Y CORREGIMOS
+════════════════════════════════════════════════════════════
+
+BUG 1 — desacoplar_patrones
+─────────────────────────────────────────────────────────
+
+QUÉ PASABA
+La función tenía un bug: cuando detectaba un patrón de encabezado (por ejemplo
+"Limitaciones" al inicio de una línea), reemplazaba la LÍNEA ENTERA por el token
+neutro [SECCION]. Resultado: 307 fragmentos quedaron reducidos a una sola palabra
+inútil: "[SECCION]" — LIM=249 y CONC=58.
+
+POR QUÉ ES GRAVE
+Un fragmento de una sola palabra no puede clasificarse retóricamente. Si entra en
+entrenamiento, el modelo aprende que [SECCION] puede ser LIM o CONC con igual
+probabilidad — ruido puro que degrada el entrenamiento.
+
+EL FIX
+La regla correcta según el enunciado es: encontrar la PRIMERA ocurrencia del patrón
+regex en todo el texto y reemplazar SOLO el match. El texto antes y después queda intacto.
+
+  Código corregido:
+  def desacoplar_patrones(texto, etiqueta):
+      if etiqueta not in _HEADING_COMPILADOS:
+          return texto, False
+      for patron in _HEADING_COMPILADOS[etiqueta]:
+          m = patron.search(texto)
+          if m:
+              nuevo = texto[:m.start()] + TOKEN_NEUTRO + texto[m.end():]
+              return nuevo, True
+      return texto, False
+
+POR QUÉ EXISTE EL DESACOPLAMIENTO
+Para que el modelo no aprenda a reconocer LIM/CONC por la presencia de palabras como
+"Limitaciones" en el encabezado — tiene que aprender la estructura lingüística real
+del fragmento. Sin desacoplamiento, un modelo de 1 neurona podría acertar solo
+buscando la palabra clave en el título.
+
+
+BUG 2 — Leakage EVAL ↔ TRAIN
+─────────────────────────────────────────────────────────
+
+QUÉ PASABA
+El notebook tenía EVAL_OFICIAL_PATH apuntando al archivo pre-anotación
+(camilo_validacion_humana.csv), no al post-anotación (camilo_eval_set.csv).
+Resultado: 253 doc_ids del EVAL real se colaron en el parquet de entrenamiento.
+
+EL FIX
+Cambiar EVAL_OFICIAL_PATH al archivo correcto (camilo_eval_set.csv, 335 doc_ids
+validados por humanos). Implementar una blocklist en la celda de split que excluye
+del TRAIN todos los doc_ids que aparecen en EVAL — garantizando separación limpia.
+
+
+BUG 3 — POS_RELATIVA en Dataset Tarea 2
+─────────────────────────────────────────────────────────
+
+QUÉ PASABA
+1. 416 filas de LIM y CONC tenían POS_RELATIVA con valores discretos (1 / 0.5 / 0.333)
+   calculados como número_de_sección / total_secciones, no la posición real del fragmento.
+2. Una fila de CONTR (doc_id=335504) tenía POS_RELATIVA = '75005439.txt'
+   — un nombre de archivo en lugar de un número.
+
+POR QUÉ IMPORTA
+POS_RELATIVA es un feature numérico para el encoder de T2. Un valor discreto degrada
+el aprendizaje. Un string en una columna float causa crash en PyTorch.
+
+EL FIX
+Reemplazar con relative_start extraído de los parquets del corpus (valor real entre 0 y 1).
+Para 49 filas de EVAL no encontradas en ningún parquet: fallback con la media por
+etiqueta (LIM=0.394, CONC=0.524). La fila corrupta de CONTR: media de CONTR.
+
+
+DUPLICADOS EN EL CONSOLIDADO
+─────────────────────────────────────────────────────────
+
+QUÉ ENCONTRAMOS
+El dataset consolidado tenía 16 filas duplicadas (mismo texto exacto):
+  • LIM x3 + CONC x2 (Camilo)  — en mismo TRAIN o cruzando TRAIN/TEST
+  • DISC x7 (Sergio)            — filas duplicadas en EVAL
+  • CONTR x4 (Mateo)            — filas duplicadas en EVAL
+
+EL FIX
+drop_duplicates(subset='text', keep='first'): mantiene la primera ocurrencia,
+elimina repetidas. Las 2 filas de CONC que aparecían en TRAIN y TEST simultáneamente
+(leakage real) también quedaron resueltas porque keep='first' preserva la de TRAIN
+y elimina la de TEST.
+
+
+════════════════════════════════════════════════════════════
+4. DATASET TAREA 2
+════════════════════════════════════════════════════════════
+
+ESTRUCTURA
+Cada fila representa un fragmento con:
+  • LABEL_T2      — 1 (contribución) o 0 (no contribución)
+  • ETIQUETA_T1   — etiqueta retórica del fragmento (feature adicional para el encoder)
+  • POS_RELATIVA  — posición del fragmento en el documento, de 0 a 1 (feature adicional)
+  • TIPO_DATASET_T2 — TRAIN / TEST / EVAL
+
+Total: 3.125 filas. EVAL: 608 filas validadas por humanos.
+
+POR QUÉ USAR LA ETIQUETA RETÓRICA COMO FEATURE
+Un fragmento CONTR tiene mayor probabilidad a priori de ser una contribución científica.
+Un fragmento METH casi nunca lo es. El modelo puede aprender ese prior y mejorar
+su discriminación en casos ambiguos sin necesidad de reglas manuales.
+
+
+════════════════════════════════════════════════════════════
+5. NOTEBOOKS DE EXPERIMENTACIÓN
+════════════════════════════════════════════════════════════
+
+A6 — Gemini para Tarea 1  [EJECUTADO]
+Archivo: notebooks/04_a6_api_classification.ipynb
+  • Clasifica fragmentos del EVAL T1 con Gemini 2.5 Flash Lite en modo zero-shot
+  • Pipeline asíncrono con semáforo (CONCURRENCY=15) para paralelizar llamadas
+  • Checkpoint automático cada 50 requests para reanudar si se interrumpe
+  • Métricas: F1 macro, F1 por etiqueta, confusion matrix, costo y latencia
+  • Resultados guardados en Google Drive (results_a6_task1_gemini/)
+
+A7 — Gemini para Tarea 2  [LISTO PARA EJECUTAR EN COLAB]
+Archivo: notebooks/06_task2_gemini_classifier.ipynb
+  • Misma arquitectura que A6 pero adaptada a clasificación binaria CONTR vs no-CONTR
+  • Evalúa sobre las 608 filas del EVAL validado por humanos
+  • Métricas adicionales: ROC-AUC, Precision, Recall separados por etiqueta retórica
+  • Análisis de FP/FN por etiqueta: ¿confunde Gemini METH con CONTR?
+  • Registra costo y latencia para el análisis comparativo A8
+
+Encoders + Open-weight T2  [LISTO PARA COLAB PRO]
+Archivo: notebooks/06_task2_encoders_openweight.ipynb
+  • Fine-tuning de BETO y SciBETO para clasificación binaria con pos_rel como feature
+  • Comparación con modelos open-weight (LLaMA, Mistral via Ollama)
+  • Produce el artefacto HuggingFace del mejor modelo para el despliegue
+
+
+════════════════════════════════════════════════════════════
+6. ARQUITECTURA DE DESPLIEGUE
+════════════════════════════════════════════════════════════
+
+PRINCIPIO DE DISEÑO: SEPARACIÓN POR CONTRATO
+Sergio construyó el demostrador Streamlit (demo/app.py). Nosotros construimos el
+backend real (api/). El contrato entre los dos es un JSON con estructura fija.
+Sergio nunca modifica nada cuando cambiamos el modelo — solo se cambia qué archivo
+se llama mock_backend.py.
+
+Esto se llama diseño contract-first: primero se define la estructura de datos que
+necesita la interfaz, de ahí se deriva tanto el mock como el backend real.
+Permite que dos equipos trabajen en paralelo sin interferirse.
+
+
+FLUJO DE UNA REQUEST DE PUNTA A PUNTA
+
+  1. Usuario escribe texto en el dashboard de Sergio (app.py)
+  2. app.py llama: analyze_document(text, t1_model_id, t2_model_id)
+  3. backend_production.py hace POST /analyze al FastAPI en puerto 8000
+  4. main.py recibe el texto → lo parte en párrafos con _split_paragraphs()
+  5. Por cada párrafo:
+       a. predict_t1(párrafo, modelo)
+          → inference.py busca en _T1_DISPATCH la función del modelo seleccionado
+          → llama Gemini / Encoder HuggingFace / Ollama
+          → devuelve Task1Prediction (label + confidence)
+       b. predict_t2(párrafo, modelo, etiqueta_de_t1)
+          → misma lógica con T2
+          → T2 recibe la etiqueta retórica de T1 como contexto adicional
+          → devuelve Task2Prediction (is_contribution + confidence)
+  6. main.py arma la lista de Segments y el Summary
+  7. Devuelve el JSON completo con la estructura del contrato
+  8. app.py renderiza tarjetas con colores por etiqueta
+
+EL SWITCH MOCK → PRODUCCIÓN (un solo comando)
+  cp demo/backend_production.py demo/mock_backend.py
+
+Para Sergio es transparente. La firma de las funciones es idéntica.
+En Docker esto ocurre automáticamente al levantar los contenedores.
+
+
+ESTRUCTURA DE ARCHIVOS DEL DESPLIEGUE
+
+  api/                        ← backend real (nuestro)
+    schemas.py                Contrato de datos — clases Pydantic
+    main.py                   Servidor FastAPI con 4 endpoints
+    inference.py              Lógica: Gemini, Encoder, Ollama
+    model_loader.py           Carga lazy de artefactos — singleton en memoria
+    requirements.txt
+
+  demo/                       ← interfaz (Sergio — no se toca nunca)
+    app.py
+    mock_backend.py           ← en producción se reemplaza con backend_production.py
+    backend_production.py     ← nuestro proxy HTTP al backend real
+
+  models/
+    task1_encoder/            ← artefacto del mejor encoder T1 (PENDIENTE)
+    task2_encoder/            ← artefacto del mejor encoder T2 (PENDIENTE)
+
+  docker/
+    Dockerfile                ← empaqueta la API en contenedor Python 3.11-slim
+    docker-compose.yml        ← levanta API (8000) + Streamlit (8501)
+
+  .env.example                ← template de variables de entorno
+
+
+════════════════════════════════════════════════════════════
+7. CADA ARCHIVO DEL DESPLIEGUE — EXPLICACIÓN TÉCNICA
+════════════════════════════════════════════════════════════
+
+api/schemas.py — El contrato de datos
+──────────────────────────────────────
+Define todas las clases de datos con Pydantic. Pydantic valida tipos automáticamente:
+si inference.py devuelve un string donde se espera un float, el error ocurre
+inmediatamente con mensaje claro — nunca llega basura al frontend.
+
+Clases principales:
+  Task1Prediction  → label, label_name, confidence, explanation
+  Task2Prediction  → is_contribution (bool), label, confidence, evidence
+  Segment          → id, position, text, task1, task2
+  AnalyzeRequest   → text, task1_model_id, task2_model_id (con defaults Gemini)
+  AnalyzeResponse  → input, models, segments, summary
+
+
+api/main.py — El servidor
+───────────────────────────
+Crea la aplicación FastAPI con CORS habilitado. Sin CORS, el navegador bloquea
+los requests del Streamlit (que corre en puerto 8501) al FastAPI (puerto 8000).
+
+Endpoints:
+  GET  /health          → {"status": "ok"} — verificación de vida del servidor
+  GET  /models/{task}   → lista modelos disponibles para task1 o task2
+  POST /analyze         → análisis completo: texto → segmentos con T1+T2
+  POST /compare         → corre los 3 modelos T2 sobre el mismo texto con la misma
+                          segmentación T1 → tabla comparativa (A/B test en tiempo real)
+
+_split_paragraphs(): intenta partir por doble salto de línea (párrafos reales).
+Si el texto viene todo junto, lo parte en ~5 chunks de oraciones usando regex.
+Así siempre hay algo que clasificar, independientemente del formato del paper.
+
+/compare alimenta la pestaña "Comparación de modelos" del dashboard de Sergio.
+Fija la segmentación de T1 y varía solo el modelo T2 — eso es lo que la rúbrica
+llama comparación de arquitecturas sobre el mismo input.
+
+
+api/inference.py — La lógica de predicción
+────────────────────────────────────────────
+PROMPTS DE SISTEMA
+El prompt de T1 define las 8 etiquetas con sus criterios lingüísticos y exige
+responder ÚNICAMENTE con JSON: {"label": "...", "confidence": ...}
+
+El prompt de T2 define cuándo label=1:
+  - "proponemos", "nuestra contribución es", "presentamos un nuevo método"
+  - "a diferencia de trabajos previos, nuestro enfoque"
+Y cuándo label=0: resultados, metodología, revisión de literatura, conclusiones.
+
+Parámetros clave del LLM:
+  temperature=0    → determinista y reproducible (mismo input = mismo output)
+  max_output_tokens=60 → el JSON cabe en ~35 tokens, limita costo y latencia
+
+GEMINI (_gemini_t1 / _gemini_t2)
+Usa google.genai (SDK nuevo). Llama models.generate_content() en modo sync.
+Parsea la respuesta con _parse_json():
+  - Limpia markdown si el modelo envuelve el JSON en triple backtick
+  - Busca {.*} con regex DOTALL para extraer el JSON de donde esté
+  - Si falla: devuelve None y el llamador asigna un fallback seguro
+
+ENCODER (_encoder_t1 / _encoder_t2)
+  1. get_task1_encoder() → carga desde models/task1_encoder/ (lazy, una sola vez)
+  2. tokenizer(text, return_tensors="pt", truncation=True, max_length=512)
+  3. with torch.no_grad(): logits = model(**inputs).logits
+     (no_grad desactiva gradientes — en inferencia no se entrena)
+  4. probs = torch.softmax(logits, dim=-1)[0]
+     (convierte logits crudos a probabilidades que suman 1)
+  5. idx = probs.argmax() → label = model.config.id2label[idx]
+
+Para T2 el encoder recibe etiqueta retórica + texto via token [SEP]:
+  prompt = f"{rhetorical_label} [SEP] {text}"
+
+OPEN-WEIGHT VIA OLLAMA (_ollama_t1 / _ollama_t2)
+Lee OLLAMA_URL y OLLAMA_MODEL_T1/T2 del entorno.
+Hace POST a /api/generate de Ollama con stream=False.
+Parsea con _parse_json(). Si el modelo no está configurado: error claro.
+
+DISPATCH (el punto de extensión del sistema)
+Diccionarios que mapean model_id (string) → función:
+  _T1_DISPATCH = {
+    "commercial-api-gemini-task1": _gemini_t1,
+    "encoder-scibeto-task1":       _encoder_t1,
+    "openweight-task1":            _ollama_t1,
+  }
+Para agregar un modelo nuevo: una entrada al diccionario. main.py no cambia.
+La interfaz de Sergio no cambia. El dispatch es el único punto a modificar.
+
+
+api/model_loader.py — Carga lazy con patrón singleton
+───────────────────────────────────────────────────────
+_registry = {} (diccionario vacío al arrancar el servidor)
+
+Cuando se llama get_task1_encoder():
+  • Si la clave está en _registry → devuelve lo que está en memoria (instantáneo)
+  • Si no está → carga desde disco (~2-3 segundos), guarda en _registry, devuelve
+
+Un encoder pesa ~400-500 MB. Sin el registry, cada request lo recargaría desde disco.
+Con el registry, solo la primera llamada paga ese costo. Las siguientes son instantáneas.
+Esto se llama patrón singleton: una sola instancia creada una vez, compartida siempre.
+
+
+demo/backend_production.py — El proxy
+──────────────────────────────────────
+Implementa analyze_document() y compare_task2_models() con exactamente la misma
+firma que el mock de Sergio. Por dentro hace requests HTTP al FastAPI.
+Para app.py es completamente transparente.
+
+Importa RHETORICAL_LABELS y get_model_options directamente del mock de Sergio
+para no redefinirlos — si Sergio cambia un color, se refleja automáticamente.
+
+
+docker/Dockerfile
+──────────────────
+  FROM python:3.11-slim        imagen base ligera sin extras innecesarios
+  WORKDIR /app
+  COPY api/requirements.txt    se copia ANTES del código (intencional por cache)
+  RUN pip install              si solo cambia el código, Docker reutiliza esta capa
+  COPY api/ ./api/             el código
+  RUN mkdir -p models/         directorios vacíos — los modelos se montan como volumen
+  EXPOSE 8000
+  CMD uvicorn api.main:app     arranca el servidor
+
+Los modelos NO están dentro de la imagen. Se montan como volumen en runtime
+porque pesan 1-2 GB. Incluirlos significaría resubir gigabytes por cada cambio de código.
+
+
+docker/docker-compose.yml
+───────────────────────────
+Levanta dos servicios con un solo comando (docker-compose up --build):
+  api (puerto 8000)  → construye la imagen, lee .env, monta models/ como volumen
+  demo (puerto 8501) → ejecuta el cp de backend_production automáticamente
+                       y luego corre streamlit run demo/app.py
+
+
+════════════════════════════════════════════════════════════
+8. PRÓXIMOS PASOS — LO QUE FALTA PARA EL DESPLIEGUE REAL
+════════════════════════════════════════════════════════════
+
+PASO 1 — Entrenar y elegir el mejor encoder T1  [BLOQUEANTE]
+Correr notebooks de entrenamiento con Dataset_consolidado_v3_LIM2000.csv.
+Comparar: BETO-base vs SciBETO vs mBERT vs RoBERTa-es. Criterio: F1 macro en EVAL.
+Exportar el ganador en formato HuggingFace a models/task1_encoder/.
+Archivos necesarios: config.json, model.safetensors, tokenizer.json, vocab.txt
+
+PASO 2 — Entrenar y elegir el mejor encoder T2  [BLOQUEANTE]
+Mismo proceso para T2 con consolidado_tarea_2.csv.
+Criterio: F1 binaria + ROC-AUC sobre el EVAL de 608 filas.
+Exportar a models/task2_encoder/.
+
+PASO 3 — Ejecutar notebook A7 (Gemini T2)  [PENDIENTE]
+Abrir 06_task2_gemini_classifier.ipynb en Colab con consolidado_tarea_2.csv en Drive.
+Necesitamos estas métricas para el análisis comparativo A8 (costo/calidad/latencia).
+
+PASO 4 — Decidir el modelo open-weight  [DECISIÓN DE EQUIPO]
+Opciones:
+  a) Ollama local — LLaMA 3 o Mistral, sin costo, sin internet, requiere GPU
+  b) Groq API — gratis, llama3-8b-8192, ya usado en el proyecto, más fácil
+  c) HuggingFace Inference API — opción intermedia
+
+Si se elige Groq: cambiar _ollama_t1/_ollama_t2 en inference.py (~20 líneas).
+El resto del sistema no cambia.
+
+PASO 5 — Copiar los artefactos  [DESPUÉS DE PASOS 1 Y 2]
+  cp -r ruta/mejor_modelo_t1/ models/task1_encoder/
+  cp -r ruta/mejor_modelo_t2/ models/task2_encoder/
+El model_loader.py ya sabe dónde buscarlos. Cero cambios de código.
+
+PASO 6 — Prueba de integración local  [ANTES DE PRESENTAR]
+  cp .env.example .env             (llenar GOOGLE_API_KEY)
+  pip install -r api/requirements.txt
+  uvicorn api.main:app --reload
+  export BACKEND_URL=http://localhost:8000
+  cp demo/backend_production.py demo/mock_backend.py
+  streamlit run demo/app.py
+Verificar: análisis con Gemini, comparación de 3 modelos T2, descarga del JSON.
+
+PASO 7 — Docker para la presentación  [RECOMENDADO]
+  docker-compose -f docker/docker-compose.yml up --build
+Garantiza que el demostrador corra igual en cualquier máquina del profesor o aula.
+
+
+════════════════════════════════════════════════════════════
+9. RÚBRICA vs LO QUE CONSTRUIMOS
+════════════════════════════════════════════════════════════
+
+Dataset T1: 8 etiquetas, 250-999 palabras, TRAIN/TEST/EVAL sin leakage
+  Estado: COMPLETADO
+  Evidencia: Dataset_consolidado_v3_LIM2000.csv — 17.033 filas, coupling=0
+
+Dataset T2: clasificación binaria, EVAL validado por humanos
+  Estado: COMPLETADO
+  Evidencia: consolidado_tarea_2.csv — 3.125 filas, POS_RELATIVA float64
+
+A6 — LLM comercial via API en T1 (zero-shot)
+  Estado: COMPLETADO
+  Evidencia: 04_a6_api_classification.ipynb — resultados en Drive
+
+A7 — LLM comercial via API en T2 (zero-shot)
+  Estado: PENDIENTE EJECUCIÓN
+  Siguiente acción: correr 06_task2_gemini_classifier.ipynb en Colab
+
+Encoder fine-tuned para T1 y T2
+  Estado: PENDIENTE — slots en el backend listos, faltan los artefactos
+  Siguiente acción: entrenar, evaluar, exportar a models/
+
+Modelo open-weight en la comparación
+  Estado: PENDIENTE DECISIÓN
+  Siguiente acción: elegir Ollama / Groq / HF y configurar .env
+
+Demostrador interactivo con ambas tareas
+  Estado: COMPLETADO con mock — switch a producción pendiente de pasos 1-5
+  Evidencia: demo/ + api/ — arquitectura lista
+
+Comparación de modelos sobre el mismo input (A/B test)
+  Estado: COMPLETADO
+  Evidencia: endpoint /compare en api/main.py — pestaña del dashboard de Sergio
+
+Análisis A8 de costo / latencia / calidad
+  Estado: EN PROGRESO
+  Evidencia: latency_ms y relative_cost en schemas.py, falta datos de A7
+
+
+════════════════════════════════════════════════════════════
+10. DECISIONES PENDIENTES DEL EQUIPO
+════════════════════════════════════════════════════════════
+
+1. ¿CUÁL ENCODER T1 GANA?
+   Comparar F1 macro en EVAL entre BETO-base, SciBETO, mBERT, RoBERTa-es.
+   Hasta tener esta decisión, el slot encoder en el demostrador devuelve error.
+
+2. ¿CUÁL ENCODER T2 GANA?
+   F1 binaria + ROC-AUC sobre el EVAL de 608 filas validadas por humanos.
+   Este encoder compite directamente contra Gemini en la pestaña de comparación.
+
+3. ¿GROQ O OLLAMA PARA OPEN-WEIGHT?
+   Groq: más fácil (API key, sin GPU, gratis).
+   Ollama: completamente local, sin costo, requiere hardware.
+   Impacto en el código: ~20 líneas en api/inference.py. El resto no cambia.
+
+
+════════════════════════════════════════════════════════════
+GLOSARIO
+════════════════════════════════════════════════════════════
+
+doc_id          Identificador numérico único del paper fuente en el corpus CORE
+leakage         Filtración de información del set de evaluación al de entrenamiento
+desacoplamiento Reemplazo del encabezado de sección para que el modelo aprenda
+                estructura lingüística, no palabras clave superficiales
+Pydantic        Librería Python que valida tipos de datos automáticamente en runtime
+FastAPI         Framework Python para construir APIs HTTP de alto rendimiento
+Ollama          Servidor local para correr LLMs open-weight (LLaMA, Mistral, etc.)
+zero-shot       Clasificación sin ejemplos en el prompt — solo instrucciones
+fine-tuning     Entrenamiento adicional de un modelo preentrenado sobre datos específicos
+singleton       Patrón de diseño donde una instancia se crea una vez y se reutiliza
+contract-first  Metodología donde se define el contrato de datos antes de implementar
+pos_rel         Posición relativa del fragmento en el documento (float entre 0.0 y 1.0)
+ROC-AUC         Métrica robusta al desbalance de clases para clasificación binaria
+F1 macro        Promedio del F1 por clase sin ponderar por frecuencia — penaliza
+                clases con bajo desempeño aunque sean minoritarias
+token neutro    [SECCION] — reemplazo para patrones de encabezado en el desacoplamiento
+dispatch        Diccionario que mapea nombre de modelo → función de inferencia

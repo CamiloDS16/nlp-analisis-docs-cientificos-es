@@ -19,6 +19,13 @@ torch
 datasets
 spacy
 
+# ── Modelos comerciales via API ───────────────────────────────────────────────
+google-genai
+openai>=1.0
+
+# ── Despliegue ────────────────────────────────────────────────────────────────
+streamlit
+
 # ── Utilidades ────────────────────────────────────────────────────────────────
 tqdm
 jupyter

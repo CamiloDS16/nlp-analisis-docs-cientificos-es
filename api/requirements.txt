@@ -1,0 +1,12 @@
+fastapi>=0.110
+uvicorn[standard]>=0.27
+pydantic>=2.0
+httpx
+
+# commercial APIs
+google-genai
+openai>=1.0
+
+# encoder inference — only needed when models/task*_encoder/ exist
+# transformers>=4.40
+# torch>=2.2
