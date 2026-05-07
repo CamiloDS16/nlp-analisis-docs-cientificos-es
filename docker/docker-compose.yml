@@ -25,7 +25,6 @@ services:
     depends_on:
       - api
     command: >
-      bash -c "pip install --quiet streamlit pandas &&
-               cp demo/backend_production.py demo/mock_backend.py &&
+      bash -c "pip install --quiet streamlit pandas requests &&
                streamlit run demo/app.py --server.address=0.0.0.0"
     restart: unless-stopped

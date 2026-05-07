@@ -94,10 +94,11 @@ def _gemini_t1(text: str) -> Task1Prediction:
     cfg = types.GenerateContentConfig(
         system_instruction=_T1_SYSTEM,
         temperature=0,
-        max_output_tokens=60,
+        max_output_tokens=150,
+        thinking_config=types.ThinkingConfig(thinking_budget=0),
     )
     response = client.models.generate_content(
-        model="gemini-2.5-flash-lite",
+        model="gemini-2.5-flash",
         contents=f"Clasifica el siguiente fragmento:\n\n{_truncate(text)}",
         config=cfg,
     )
@@ -121,11 +122,13 @@ def _gemini_t2(text: str, rhetorical_label: str = "") -> Task2Prediction:
     cfg = types.GenerateContentConfig(
         system_instruction=_T2_SYSTEM,
         temperature=0,
-        max_output_tokens=60,
+        max_output_tokens=150,
+        thinking_config=types.ThinkingConfig(thinking_budget=0),
     )
+    context = f"Sección retórica: {rhetorical_label}.\n\n" if rhetorical_label else ""
     response = client.models.generate_content(
-        model="gemini-2.5-flash-lite",
-        contents=f"Determina si el siguiente fragmento es una contribución científica:\n\n{_truncate(text)}",
+        model="gemini-2.5-flash",
+        contents=f"Determina si el siguiente fragmento es una contribución científica:\n\n{context}{_truncate(text)}",
         config=cfg,
     )
     parsed = _parse_json(response.text.strip())
