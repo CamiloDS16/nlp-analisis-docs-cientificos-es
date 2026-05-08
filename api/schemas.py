@@ -32,18 +32,13 @@ class ModelInfo(BaseModel):
     relative_cost: str
 
 
-class Contribution(BaseModel):
-    id: str
-    label: str
-    text: str
-
-
 class Summary(BaseModel):
     dominant_label: str
     dominant_label_name: str
-    contribution_count: int
-    contributions: list[Contribution]
-    label_distribution: dict[str, int]
+    segments: int
+    contribution_segments: int
+    avg_task2_confidence: float
+    rhetorical_distribution: dict[str, int]
 
 
 class AnalyzeRequest(BaseModel):

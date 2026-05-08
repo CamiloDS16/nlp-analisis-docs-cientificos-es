@@ -11,7 +11,6 @@ from api.schemas import (
     ModelInfo,
     Segment,
     Summary,
-    Contribution,
 )
 
 app = FastAPI(title="PLN Scientific Docs API", version="0.1.0")
@@ -65,19 +64,23 @@ def _split_paragraphs(text: str) -> list[str]:
 
 def _build_summary(segments: list[Segment]) -> Summary:
     label_counts: dict[str, int] = {}
-    contributions = []
+    contribution_count = 0
+    total_t2_conf = 0.0
     for s in segments:
         lbl = s.task1.label
         label_counts[lbl] = label_counts.get(lbl, 0) + 1
         if s.task2.is_contribution:
-            contributions.append(Contribution(id=s.id, label=lbl, text=s.text[:200]))
+            contribution_count += 1
+        total_t2_conf += s.task2.confidence
     dominant = max(label_counts, key=label_counts.get) if label_counts else "INTRO"
+    avg_conf = total_t2_conf / len(segments) if segments else 0.0
     return Summary(
         dominant_label=dominant,
         dominant_label_name=_RHETORICAL_LABELS.get(dominant, {}).get("name", dominant),
-        contribution_count=len(contributions),
-        contributions=contributions,
-        label_distribution=label_counts,
+        segments=len(segments),
+        contribution_segments=contribution_count,
+        avg_task2_confidence=round(avg_conf, 4),
+        rhetorical_distribution=label_counts,
     )
 
 
