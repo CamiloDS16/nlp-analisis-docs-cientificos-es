@@ -6,6 +6,10 @@ from dataclasses import dataclass
 import requests
 
 def _base() -> str:
+    from pathlib import Path
+    url_file = Path(__file__).parent / ".backend_url"
+    if url_file.exists():
+        return url_file.read_text().strip()
     return os.environ.get("BACKEND_URL", "http://localhost:8000")
 
 

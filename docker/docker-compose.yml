@@ -26,6 +26,6 @@ services:
       - api
     command: >
       bash -c "pip install --quiet streamlit pandas requests &&
-               export BACKEND_URL=http://api:8000 &&
+               echo 'http://api:8000' > /app/demo/.backend_url &&
                streamlit run demo/app.py --server.address=0.0.0.0"
     restart: unless-stopped
