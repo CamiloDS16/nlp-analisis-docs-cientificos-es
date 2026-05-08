@@ -122,8 +122,6 @@ def _gemini_client():
     return genai.Client(api_key=key)
 
 
-# ── Gemini ────────────────────────────────────────────────────────────────────
-
 def _build_fewshot_contents(text: str) -> list:
     from google.genai import types
 
@@ -205,8 +203,6 @@ def _gemini_t2(text: str, rhetorical_label: str = "") -> Task2Prediction:
     return Task2Prediction(is_contribution=False, label="No contribucion", confidence=0.0, evidence="parse error")
 
 
-# ── Encoder ───────────────────────────────────────────────────────────────────
-
 def _encoder_t1(text: str) -> Task1Prediction:
     from api.model_loader import get_task1_encoder
     import torch
@@ -244,8 +240,6 @@ def _encoder_t2(text: str, rhetorical_label: str = "") -> Task2Prediction:
         evidence="",
     )
 
-
-# ── Open-weight via Ollama ────────────────────────────────────────────────────
 
 def _ollama_t1(text: str) -> Task1Prediction:
     import httpx
@@ -306,8 +300,6 @@ def _ollama_t2(text: str, rhetorical_label: str = "") -> Task2Prediction:
     return Task2Prediction(is_contribution=False, label="No contribucion", confidence=0.0, evidence="parse error")
 
 
-# ── Dispatch ──────────────────────────────────────────────────────────────────
-
 _T1_DISPATCH = {
     "commercial-api-gemini-task1":   _gemini_t1,
     "encoder-scibeto-task1":         _encoder_t1,
@@ -332,7 +324,6 @@ def predict_t2(text: str, model_id: str, rhetorical_label: str = "") -> Task2Pre
     fn = _T2_DISPATCH.get(model_id)
     if fn is None:
         raise ValueError(f"unknown task2 model: {model_id}")
-    # only gemini and ollama accept the rhetorical label context
     if model_id in ("commercial-api-gemini-task2", "openweight-task2", "encoder-beto-task2"):
         return fn(text, rhetorical_label)
     return fn(text)

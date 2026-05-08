@@ -1,9 +1,3 @@
-"""
-Production backend for the Streamlit demo.
-Proxies all inference calls to the FastAPI backend at BACKEND_URL.
-Activated automatically when BACKEND_URL env var is set (see demo/app.py).
-"""
-
 from __future__ import annotations
 
 import os
