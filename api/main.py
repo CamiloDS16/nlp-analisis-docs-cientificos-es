@@ -136,9 +136,12 @@ def compare(req: CompareRequest):
             "Texto": para[:110] + "..." if len(para) > 110 else para,
         }
         for m in _TASK2_MODELS:
-            t2      = predict_t2(para, m.id, t1.label)
-            verdict = "Si" if t2.is_contribution else "No"
-            row[m.name] = f"{verdict} ({t2.confidence:.2f})"
+            try:
+                t2      = predict_t2(para, m.id, t1.label)
+                verdict = "Si" if t2.is_contribution else "No"
+                row[m.name] = f"{verdict} ({t2.confidence:.2f})"
+            except Exception:
+                row[m.name] = "No disponible"
         rows.append(row)
 
     return rows
