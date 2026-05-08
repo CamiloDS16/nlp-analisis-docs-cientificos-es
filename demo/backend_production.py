@@ -5,7 +5,8 @@ from dataclasses import dataclass
 
 import requests
 
-_BASE = os.environ.get("BACKEND_URL", "http://localhost:8000")
+def _base() -> str:
+    return os.environ.get("BACKEND_URL", "http://localhost:8000")
 
 
 RHETORICAL_LABELS = {
@@ -54,7 +55,7 @@ def get_model_options(task: str) -> list[DemoModel]:
 
 def analyze_document(text: str, task1_model_id: str, task2_model_id: str) -> dict:
     resp = requests.post(
-        f"{_BASE}/analyze",
+        f"{_base()}/analyze",
         json={"text": text, "task1_model_id": task1_model_id, "task2_model_id": task2_model_id},
         timeout=120,
     )
@@ -64,7 +65,7 @@ def analyze_document(text: str, task1_model_id: str, task2_model_id: str) -> dic
 
 def compare_task2_models(text: str, task1_model_id: str) -> list[dict]:
     resp = requests.post(
-        f"{_BASE}/compare",
+        f"{_base()}/compare",
         json={"text": text, "task1_model_id": task1_model_id},
         timeout=120,
     )

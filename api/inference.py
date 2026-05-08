@@ -208,16 +208,26 @@ def _encoder_t1(text: str) -> Task1Prediction:
     import torch
 
     tokenizer, model = get_task1_encoder()
-    inputs = tokenizer(_truncate(text), return_tensors="pt", truncation=True, max_length=512)
+    tokenized = tokenizer(
+        text,
+        truncation=True,
+        max_length=512,
+        stride=128,
+        return_overflowing_tokens=True,
+        return_tensors="pt",
+    )
     with torch.no_grad():
-        logits = model(**inputs).logits
-    probs  = torch.softmax(logits, dim=-1)[0]
-    idx    = int(probs.argmax())
-    label  = model.config.id2label[idx]
+        logits = model(
+            input_ids=tokenized["input_ids"],
+            attention_mask=tokenized["attention_mask"],
+        ).logits
+    final_prob = torch.softmax(logits, dim=-1).mean(dim=0)
+    idx = int(final_prob.argmax())
+    label = model.config.id2label[idx]
     return Task1Prediction(
         label=label,
         label_name=_T1_LABEL_NAMES.get(label, label),
-        confidence=round(float(probs[idx]), 4),
+        confidence=round(float(final_prob[idx]), 4),
         explanation="",
     )
 
