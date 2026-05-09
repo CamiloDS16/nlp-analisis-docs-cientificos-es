@@ -1,148 +1,103 @@
-# Análisis Automático de Documentos Científicos en Español
+# Clasificación retórica de documentos científicos en español
 
-Proyecto de tesis de maestría — Universidad de los Andes  
-Construcción de un corpus anotado y modelos de clasificación de secciones
-en artículos científicos escritos en español.
+Proyecto de grado — Maestría en Inteligencia Artificial, Universidad de los Andes.
 
----
-
-## Descripción
-
-Este proyecto desarrolla la infraestructura de datos y los modelos necesarios
-para identificar y clasificar automáticamente las secciones retóricas de
-documentos científicos en español (introducción, metodología, resultados, etc.).
-
-El corpus proviene de ~1.342.100 archivos `.txt` almacenados en Google Drive
-compartido del equipo. El flujo completo incluye:
-
-1. Descarga y partición del corpus por miembro del equipo
-2. Fragmentación y etiquetado automático por heurísticas
-3. Validación humana de una muestra (10% por etiqueta)
-4. Entrenamiento y evaluación de clasificadores
+Corpus anotado y modelos de clasificación para identificar la función retórica de fragmentos en artículos científicos en español latinoamericano.
 
 ---
 
-## Asignación de etiquetas por miembro
+## Tareas
 
-| Miembro | Etiquetas asignadas          |
-|---------|------------------------------|
-| Jesus   | `INTRO`, `BACK`              |
-| Camilo  | `LIM`, `CONC`                |
-| Mateo   | `METH`, `RES`                |
-| Sergio  | `DISC`, `CONTR`              |
+**Tarea 1 — Clasificación retórica (8 clases)**
 
-**Definición de etiquetas:**
+Dado un fragmento de texto, clasificarlo en una de ocho secciones retóricas:
 
-| Etiqueta | Significado                         |
-|----------|-------------------------------------|
-| `INTRO`  | Introducción                        |
-| `BACK`   | Antecedentes / Marco teórico        |
-| `METH`   | Metodología                         |
-| `RES`    | Resultados                          |
-| `DISC`   | Discusión                           |
-| `CONTR`  | Contribuciones                      |
-| `LIM`    | Limitaciones / Trabajo futuro       |
-| `CONC`   | Conclusiones                        |
+| Etiqueta | Sección |
+|----------|---------|
+| `INTRO`  | Introducción |
+| `BACK`   | Antecedentes / Marco teórico |
+| `METH`   | Metodología |
+| `RES`    | Resultados |
+| `DISC`   | Discusión |
+| `CONTR`  | Contribución científica |
+| `LIM`    | Limitaciones / Trabajo futuro |
+| `CONC`   | Conclusiones |
+
+**Tarea 2 — Detección de contribución (binaria)**
+
+Dado un fragmento, determinar si declara explícitamente una contribución científica original (1) o no (0).
 
 ---
 
-## Estructura del repositorio
+## Dataset
+
+~17.000 fragmentos extraídos de artículos y tesis de universidades latinoamericanas. Anotación humana distribuida entre cuatro miembros del equipo con validación por kappa de Cohen.
+
+| Miembro | Etiquetas T1 |
+|---------|-------------|
+| Jesús   | `INTRO`, `BACK` |
+| Camilo  | `LIM`, `CONC` |
+| Mateo   | `METH`, `RES` |
+| Sergio  | `DISC`, `CONTR` |
+
+Dataset consolidado: `data/Dataset_consolidado_final_v4.csv` — particiones `TRAIN`, `TEST`, `EVAL`.
+
+---
+
+## Modelos evaluados
+
+| Slot | Modelo T1 | Macro F1 T1 | Modelo T2 |
+|------|-----------|-------------|-----------|
+| LLM comercial | Gemini 2.5 Flash, few-shot k=3 | 0.497 | Gemini 2.5 Flash, zero-shot |
+| Encoder fine-tuned | SciBETO (Sergio) | — | Pendiente |
+| Open-weight | LLaMA 3 vía Ollama | — | Pendiente |
+
+La estrategia few-shot k=3 (majority voting, temperatura 0.5) se comparó contra zero-shot (temperatura 0) sobre 1699 fragmentos EVAL. Resultados en `notebooks/04_a6_api_classification_v6.ipynb`.
+
+---
+
+## Estructura
 
 ```
-nlp-analisis-docs-cientificos-es/
-├── data/
-│   ├── particiones.csv          # Asignación de documentos por miembro
-│   ├── raw/                     # Punteros .dvc (los .parquet viven en Drive)
-│   └── processed/
-│       ├── task1/               # Clasificación de secciones
-│       │   ├── train/
-│       │   ├── val/
-│       │   └── test/
-│       └── task2/               # Tarea secundaria
-│           ├── train/
-│           └── test/
-├── notebooks/
-│   ├── 01_carga_corpus.ipynb    # Descarga y filtra corpus desde Drive
-│   └── 02_etiquetado_task1.ipynb # Etiquetado automático + muestra humana
-├── src/
-│   ├── __init__.py
-│   ├── partition_dataset.py     # Lógica de partición train/val/test
-│   ├── preprocessing.py         # Limpieza y normalización de texto
-│   ├── etiquetado_heuristico.py # Patrones regex por etiqueta
-│   ├── desacoplamiento.py       # Separación de capas de datos
-│   └── setup_dvc.sh             # Script de configuración de DVC
-├── models/                      # Modelos entrenados (ignorados por git)
-├── demo/                        # Aplicación de demostración
-├── .gitignore
-├── .dvcignore
-├── dvc.yaml                     # Pipeline de DVC
-└── requirements.txt
+api/                  FastAPI — inferencia T1 + T2, tres slots de modelo
+  gemini_config.py    prompts y parámetros centralizados
+  fewshot_examples.json  8 ejemplos few-shot (uno por etiqueta, trazables a TRAIN)
+demo/                 Streamlit — interfaz de demostración (Sergio)
+docker/               Dockerfile + docker-compose.yml + README de despliegue
+notebooks/
+  04_a6_api_classification_v6.ipynb   evaluación T1: zero-shot vs few-shot k=3
+  06_task2_gemini_classifier.ipynb    evaluación T2: clasificación binaria CONTR
+models/               pesos fine-tuned (excluidos de git, transferir por SCP)
+label_studio/         tareas de anotación por miembro para kappa Cohen
+data/
+  Dataset_consolidado_final_v4.csv   dataset T1 consolidado
+  DATASET_TAREA_2_CONSOLIDADO_FINAL_ORIGINAL.xlsx  dataset T2
 ```
 
 ---
 
-## Setup
+## Despliegue
 
-### 1. Clonar el repositorio
+EC2 t3.small (AWS Academy), Docker Compose V2. Ver `docker/README.md`.
 
 ```bash
-git clone https://github.com/CamiloDS16/nlp-analisis-docs-cientificos-es.git
-cd nlp-analisis-docs-cientificos-es
+cd docker
+docker compose up --build -d
+curl -s localhost:8000/health
 ```
 
-### 2. Instalar dependencias
-
-```bash
-python -m venv venv
-source venv/bin/activate          # En Windows: venv\Scripts\activate
-pip install -r requirements.txt
-```
-
-### 3. Configurar DVC
-
-```bash
-bash src/setup_dvc.sh
-```
-
-DVC está configurado con Google Drive como remote. La primera vez que hagas
-`dvc pull` o `dvc push`, te pedirá autenticación con tu cuenta de Google.
-
-### 4. Descargar datos (si ya existen punteros .dvc)
-
-```bash
-dvc pull
-```
+Frontend en `http://<IP>:8501`, API en `http://<IP>:8000`.
 
 ---
 
-## Flujo de trabajo para cada miembro
+## Notebooks en Colab
 
-1. Abrir `notebooks/01_carga_corpus.ipynb` en Google Colab
-2. Cambiar `NOMBRE = "TuNombre"` en la celda de configuración
-3. Ejecutar todas las celdas → genera `{nombre}_corpus.parquet` en Drive
-4. Abrir `notebooks/02_etiquetado_task1.ipynb` en Colab
-5. Cambiar `NOMBRE` y `ETIQUETAS_ASIGNADAS` según la tabla de arriba
-6. Ejecutar todas las celdas → genera dataset etiquetado y muestra de validación
+Los notebooks de evaluación corren en Google Colab con acceso a Drive.
 
----
+**T1 (`04_a6_api_classification_v6.ipynb`):**
+- Subir `data/Dataset_consolidado_final_v4.csv` y `api/fewshot_examples.json` a la raíz de Drive
+- Agregar `GOOGLE_API_KEY` en Colab Secrets con el toggle activo
 
-## Versiones principales
-
-- Python 3.10+
-- Transformers (Hugging Face)
-- DVC con remote en Google Drive
-
----
-
-## Mock de despliegue
-
-El repositorio incluye un demostrador Streamlit en `demo/` para validar la experiencia de despliegue antes de conectar modelos reales. El mock funciona como dashboard porque el objetivo del proyecto es explorar predicciones, comparar arquitecturas y revisar cualitativamente decisiones de los modelos frente a la misma entrada textual.
-
-Para ejecutarlo:
-
-```bash
-pip install -r requirements.txt
-streamlit run demo/app.py
-```
-
-La documentacion completa del mock esta en `demo/README.md`.
+**T2 (`06_task2_gemini_classifier.ipynb`):**
+- Subir `DATASET_TAREA_2_CONSOLIDADO_FINAL_ORIGINAL.xlsx` a la raíz de Drive
+- Misma API key
