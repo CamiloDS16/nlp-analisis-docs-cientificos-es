@@ -1,186 +1,104 @@
-# Despliegue del sistema — Docker Compose en EC2
+# Despliegue — Docker Compose en EC2
 
-Este directorio contiene los archivos para levantar el sistema completo: backend FastAPI (puerto 8000) + demo Streamlit (puerto 8501) como dos contenedores orquestados.
-
----
-
-## Requisitos previos
-
-- Instancia EC2: `t3.small` (2 vCPU, 2 GB RAM) con Ubuntu 24.04 LTS
-- Security group con puertos **8000** y **8501** abiertos (inbound TCP, 0.0.0.0/0)
-- Docker y Docker Compose instalados en la instancia
-- Clave SSH para conectarse al EC2
+Dos contenedores orquestados: FastAPI en el 8000, Streamlit en el 8501. La instancia es una `t3.small` (2 vCPU, 2 GB RAM) con Ubuntu 24.04 en AWS Academy. Los puertos 8000 y 8501 deben estar abiertos en el security group.
 
 ---
 
-## Estructura esperada en el servidor
+## Prerrequisitos
 
-```
-nlp-docs-cientificos-es/          ← clon del repo (git clone)
-├── api/
-├── demo/
-├── docker/
-│   ├── Dockerfile
-│   └── docker-compose.yml
-├── models/
-│   ├── task1_encoder/            ← pesos del encoder T1 (transferir via SCP)
-│   └── task2_encoder/            ← pesos del encoder T2 (pendiente)
-└── .env                          ← API keys (NO está en git — crear manualmente)
-```
-
-Los pesos de los modelos **no están en el repositorio** (excluidos en `.gitignore`). Se transfieren directamente al EC2 via SCP.
+- Docker >= 24 y Docker Compose V2 (`docker compose`, sin guión) instalados en la instancia.
+- Los pesos de los modelos **no están en el repositorio** (`.gitignore` excluye `*.safetensors`, `*.bin`, `*.pt`). Se transfieren al EC2 por SCP antes del primer despliegue.
+- Un archivo `.env` en la raíz del repositorio con las API keys. No se sube a git.
 
 ---
 
-## Paso a paso para reproducir el despliegue
-
-### 1. Clonar el repositorio en EC2
+## Primer despliegue
 
 ```bash
-git clone https://github.com/<org>/nlp-docs-cientificos-es.git
-cd nlp-docs-cientificos-es
+# En la instancia EC2
+git clone <repo_url> && cd nlp-docs-cientificos-es
+
+# Crear .env
+echo "GOOGLE_API_KEY=<clave>" > .env
+
+cd docker
+docker compose up --build -d
 ```
 
-### 2. Crear el archivo `.env` con las API keys
+Transferir los pesos desde la máquina local antes de levantar los contenedores (o con los contenedores detenidos):
 
 ```bash
-cat > .env << 'EOF'
-GOOGLE_API_KEY=tu_clave_google_aqui
-# Opcional si se usa Ollama local:
-# OLLAMA_URL=http://localhost:11434
-# OLLAMA_MODEL_T1=llama3
-# OLLAMA_MODEL_T2=llama3
-EOF
+# Desde la máquina local
+scp -i <clave.pem> -r models/task1_encoder/ ubuntu@<IP>:~/nlp-docs-cientificos-es/models/
 ```
 
-### 3. Transferir los pesos del encoder desde tu máquina local
+Los pesos se montan como volumen (`../models:/app/models`) para no requerir reconstruir la imagen cada vez que cambia un modelo.
 
-Desde tu **máquina local** (no desde EC2), con la IP pública de la instancia:
+---
+
+## Actualizar código
+
+Si el cambio es solo en archivos Python (sin tocar `requirements.txt` ni `Dockerfile`):
 
 ```bash
-# Encoder Task 1
-scp -i tu_clave.pem -r models/task1_encoder/ ubuntu@<IP_EC2>:~/nlp-docs-cientificos-es/models/
-
-# Encoder Task 2 (cuando esté disponible)
-scp -i tu_clave.pem -r models/task2_encoder/ ubuntu@<IP_EC2>:~/nlp-docs-cientificos-es/models/
+git pull && docker compose down && docker compose up -d
 ```
 
-Verificar que los pesos quedaron en la ruta correcta:
+Si cambiaron dependencias:
 
 ```bash
-ls models/task1_encoder/
-# Debe mostrar: config.json  model.safetensors  tokenizer*  (o equivalente)
+git pull && docker compose up --build -d
 ```
 
-### 4. Limpiar espacio en disco antes de construir (si es primera vez)
-
-PyTorch ocupa ~2 GB en la imagen. Si el disco está lleno de imágenes antiguas:
+Si el disco está lleno por capas Docker antiguas (sucede con t3.small y PyTorch):
 
 ```bash
 docker system prune -a -f
 ```
 
-### 5. Construir y levantar los contenedores
+---
 
-```bash
-cd docker
-docker compose up --build -d
-```
-
-- `--build` reconstruye la imagen del API desde el `Dockerfile`
-- `-d` corre en segundo plano (detached)
-
-### 6. Verificar que ambos contenedores están corriendo
-
-```bash
-docker ps
-```
-
-Debe mostrar dos contenedores activos:
+## Arquitectura
 
 ```
-NAMES               PORTS
-docker-api-1        0.0.0.0:8000->8000/tcp
-docker-demo-1       0.0.0.0:8501->8501/tcp
+Puerto 8501  →  demo  (python:3.11-slim, sin imagen custom)
+                  │  POST /analyze, /compare
+              http://api:8000
+Port 8000    →  api   (imagen desde docker/Dockerfile)
+                  ├── Gemini 2.5 Flash  — via GOOGLE_API_KEY en .env
+                  ├── Encoder T1        — models/task1_encoder/ (volumen)
+                  └── Encoder T2        — models/task2_encoder/ (volumen)
 ```
 
-### 7. Verificar salud del backend
-
-```bash
-curl http://localhost:8000/health
-# Respuesta esperada: {"status": "ok"}
-```
-
-Desde un navegador externo (reemplazar con la IP pública actual):
-
-```
-http://<IP_EC2>:8000/health
-http://<IP_EC2>:8501
-```
+El frontend resuelve el backend por DNS interno de Docker Compose como `http://api:8000`. La URL se escribe a un archivo `.backend_url` al iniciar el contenedor demo en lugar de pasarla como variable de entorno, porque Streamlit resuelve las variables de entorno al importar el módulo, no en cada request.
 
 ---
 
-## Actualizar el código sin reconstruir la imagen
+## Endpoints
 
-Si solo cambiaste código Python (no `requirements.txt` ni `Dockerfile`):
+| Ruta | Descripción |
+|------|-------------|
+| `GET /health` | Liveness check |
+| `GET /models/{task}` | Modelos disponibles para `task1` o `task2` |
+| `POST /analyze` | Segmenta el texto en párrafos y corre T1 + T2 sobre cada uno |
+| `POST /compare` | Fija la segmentación T1 y corre los tres modelos T2 en paralelo |
+
+---
+
+## Estado actual de los modelos
+
+| Slot | T1 | T2 | Estado |
+|------|----|----|--------|
+| `commercial-api-gemini` | Gemini 2.5 Flash, few-shot k=3 | Gemini 2.5 Flash, zero-shot | Activo |
+| `encoder-scibeto` | SciBETO fine-tuned (Sergio) en `models/task1_encoder/` | Pendiente | T1 activo, T2 sin artefacto |
+| `openweight` | LLaMA 3 vía Ollama | LLaMA 3 vía Ollama | Requiere t3.large — t3.small no tiene RAM para el modelo 8B |
+
+---
+
+## Nota sobre la IP
+
+AWS Academy asigna una IP pública nueva en cada arranque de la instancia. La IP actual se obtiene desde dentro del EC2 con:
 
 ```bash
-git pull
-docker compose down && docker compose up -d
-```
-
-Si cambiaste dependencias:
-
-```bash
-git pull
-docker compose up --build -d
-```
-
----
-
-## Arquitectura de los contenedores
-
-```
-Usuario → http://<IP>:8501  →  demo (Streamlit, python:3.11-slim)
-                                  ↓ HTTP POST /analyze
-              http://api:8000  →  api (FastAPI/uvicorn, imagen custom)
-                                  ├── Gemini 2.5 Flash (via GOOGLE_API_KEY)
-                                  ├── Encoder T1 (models/task1_encoder/ montado como volumen)
-                                  └── Encoder T2 (models/task2_encoder/ montado como volumen)
-```
-
-**Red interna Docker**: el frontend resuelve el backend como `http://api:8000` usando el DNS interno de Docker Compose. La URL se escribe a un archivo `.backend_url` al inicio del contenedor demo — Streamlit la lee en cada llamada porque cachea las variables de entorno al importar el módulo.
-
-**Volumen de modelos**: los pesos no van dentro de la imagen. Se montan en runtime desde `../models:/app/models`. Así se pueden actualizar los pesos sin reconstruir la imagen.
-
----
-
-## Endpoints del API
-
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| GET | `/health` | Verificación de vida del servidor |
-| GET | `/models/{task}` | Lista modelos disponibles para `task1` o `task2` |
-| POST | `/analyze` | Analiza texto completo (T1 + T2 sobre cada párrafo) |
-| POST | `/compare` | Fija segmentación T1 y compara los tres modelos T2 |
-
----
-
-## Modelos disponibles
-
-| Slot | Modelo T1 | Modelo T2 | Estado |
-|------|-----------|-----------|--------|
-| `commercial-api-gemini` | Gemini 2.5 Flash | Gemini 2.5 Flash | Activo |
-| `encoder-scibeto` | SciBETO fine-tuned (Sergio) | Pendiente | T1 activo |
-| `openweight` | LLaMA 3 via Ollama | LLaMA 3 via Ollama | Requiere t3.large |
-
----
-
-## Nota sobre la IP pública
-
-AWS Academy cambia la IP pública cada vez que se reinicia la instancia. Para obtener la IP actual:
-
-```bash
-# Desde la consola AWS, o desde dentro del EC2:
 curl -s http://169.254.169.254/latest/meta-data/public-ipv4
 ```
