@@ -105,7 +105,7 @@ El frontend resuelve el backend por DNS interno de Docker Compose como `http://a
 
 | Slot | T1 | T2 | Estado |
 |------|----|----|--------|
-| `commercial-api-gemini` | Gemini 2.5 Flash, configuración seleccionada en A6 | Gemini 2.5 Flash, zero-shot | Activo |
+| `commercial-api-gemini` | Gemini 2.5 Flash, few-shot k=3 (Macro F1=0.497) | Gemini 2.5 Flash, zero-shot | Activo |
 | `encoder-scibeto` | SciBETO fine-tuned (Sergio) en `models/task1_encoder/` | Pendiente | T1 activo, T2 sin artefacto |
 | `openweight` | LLaMA 3 vía Ollama | LLaMA 3 vía Ollama | Requiere t3.large — t3.small no tiene RAM para el modelo 8B |
 
