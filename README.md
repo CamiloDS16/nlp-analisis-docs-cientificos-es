@@ -1,103 +1,74 @@
-# Clasificación retórica de documentos científicos en español
+# Análisis automático de documentos científicos en español
 
 Proyecto de grado — Maestría en Inteligencia Artificial, Universidad de los Andes.
 
-Corpus anotado y modelos de clasificación para identificar la función retórica de fragmentos en artículos científicos en español latinoamericano.
+El español académico latinoamericano carece de recursos NLP especializados para análisis del discurso científico. Este proyecto construye un corpus anotado y evalúa cuatro familias de modelos sobre dos tareas de clasificación de fragmentos textuales, con un sistema desplegado que permite comparar arquitecturas sobre texto de entrada libre.
 
 ---
 
 ## Tareas
 
-**Tarea 1 — Clasificación retórica (8 clases)**
+**T1 — Clasificación retórica:** dado un fragmento, asignarle una de ocho funciones discursivas.
 
-Dado un fragmento de texto, clasificarlo en una de ocho secciones retóricas:
-
-| Etiqueta | Sección |
+| Etiqueta | Función |
 |----------|---------|
 | `INTRO`  | Introducción |
-| `BACK`   | Antecedentes / Marco teórico |
+| `BACK`   | Antecedentes |
 | `METH`   | Metodología |
 | `RES`    | Resultados |
 | `DISC`   | Discusión |
 | `CONTR`  | Contribución científica |
-| `LIM`    | Limitaciones / Trabajo futuro |
+| `LIM`    | Limitaciones / trabajo futuro |
 | `CONC`   | Conclusiones |
 
-**Tarea 2 — Detección de contribución (binaria)**
-
-Dado un fragmento, determinar si declara explícitamente una contribución científica original (1) o no (0).
+**T2 — Detección de contribución:** clasificación binaria — el fragmento declara explícitamente una contribución científica original (1) o no (0).
 
 ---
 
-## Dataset
+## Corpus
 
-~17.000 fragmentos extraídos de artículos y tesis de universidades latinoamericanas. Anotación humana distribuida entre cuatro miembros del equipo con validación por kappa de Cohen.
-
-| Miembro | Etiquetas T1 |
-|---------|-------------|
-| Jesús   | `INTRO`, `BACK` |
-| Camilo  | `LIM`, `CONC` |
-| Mateo   | `METH`, `RES` |
-| Sergio  | `DISC`, `CONTR` |
-
-Dataset consolidado: `data/Dataset_consolidado_final_v4.csv` — particiones `TRAIN`, `TEST`, `EVAL`.
+Construido a partir del repositorio CORE (~1.8M documentos en español). Los fragmentos se definen a nivel de párrafo. El etiquetado es híbrido: ~10% anotación manual por cuatro anotadores con guía de anotación, ~90% etiquetado automático por heurísticas. Acuerdo inter-anotador: κ = 0.76 (Cohen's Kappa). Dataset final: >16.000 fragmentos etiquetados, particionado en TRAIN / TEST / EVAL.
 
 ---
 
 ## Modelos evaluados
 
-| Slot | Modelo T1 | Macro F1 T1 | Modelo T2 |
-|------|-----------|-------------|-----------|
-| LLM comercial | Gemini 2.5 Flash, few-shot k=3 | 0.497 | Gemini 2.5 Flash, zero-shot |
-| Encoder fine-tuned | SciBETO (Sergio) | — | Pendiente |
-| Open-weight | LLaMA 3 vía Ollama | — | Pendiente |
+Se evalúan cuatro familias bajo la misma partición EVAL:
 
-La estrategia few-shot k=3 (majority voting, temperatura 0.5) se comparó contra zero-shot (temperatura 0) sobre 1699 fragmentos EVAL. Resultados en `notebooks/04_a6_api_classification_v6.ipynb`.
+- **Baseline:** modelos tradicionales (TF-IDF)
+- **Encoder fine-tuned:** modelos transformer ajustados al dominio
+- **Open-weight:** modelos decoder de mediana escala
+- **LLM comercial:** modelos de gran escala vía API con prompt engineering
 
----
-
-## Estructura
-
-```
-api/                  FastAPI — inferencia T1 + T2, tres slots de modelo
-  gemini_config.py    prompts y parámetros centralizados
-  fewshot_examples.json  8 ejemplos few-shot (uno por etiqueta, trazables a TRAIN)
-demo/                 Streamlit — interfaz de demostración (Sergio)
-docker/               Dockerfile + docker-compose.yml + README de despliegue
-notebooks/
-  04_a6_api_classification_v6.ipynb   evaluación T1: zero-shot vs few-shot k=3
-  06_task2_gemini_classifier.ipynb    evaluación T2: clasificación binaria CONTR
-models/               pesos fine-tuned (excluidos de git, transferir por SCP)
-label_studio/         tareas de anotación por miembro para kappa Cohen
-data/
-  Dataset_consolidado_final_v4.csv   dataset T1 consolidado
-  DATASET_TAREA_2_CONSOLIDADO_FINAL_ORIGINAL.xlsx  dataset T2
-```
+Resultados en `notebooks/` — un notebook por familia de modelos.
 
 ---
 
-## Despliegue
+## Sistema desplegado
 
-EC2 t3.small (AWS Academy), Docker Compose V2. Ver `docker/README.md`.
+La API (FastAPI) expone tres slots de modelo intercambiables — LLM comercial, encoder fine-tuned y open-weight — sobre los mismos endpoints. La interfaz de demostración (Streamlit) permite clasificar texto libre y comparar las tres arquitecturas en paralelo sobre el mismo input.
 
-```bash
-cd docker
-docker compose up --build -d
-curl -s localhost:8000/health
+```
+GET  /health
+GET  /models/{task}
+POST /analyze     — segmenta el texto y corre T1 + T2
+POST /compare     — fija T1, compara los tres modelos de T2
 ```
 
-Frontend en `http://<IP>:8501`, API en `http://<IP>:8000`.
+Para instrucciones de despliegue en EC2 ver `docker/README.md`.  
+Para la interfaz de demostración ver `demo/README.md`.
 
 ---
 
-## Notebooks en Colab
+## Estructura del repositorio
 
-Los notebooks de evaluación corren en Google Colab con acceso a Drive.
-
-**T1 (`04_a6_api_classification_v6.ipynb`):**
-- Subir `data/Dataset_consolidado_final_v4.csv` y `api/fewshot_examples.json` a la raíz de Drive
-- Agregar `GOOGLE_API_KEY` en Colab Secrets con el toggle activo
-
-**T2 (`06_task2_gemini_classifier.ipynb`):**
-- Subir `DATASET_TAREA_2_CONSOLIDADO_FINAL_ORIGINAL.xlsx` a la raíz de Drive
-- Misma API key
+```
+api/              backend FastAPI — inferencia y prompts centralizados
+demo/             interfaz Streamlit
+docker/           configuración de despliegue
+notebooks/        evaluación experimental T1 y T2
+docs/             informe del proyecto
+data/             datasets (excluidos de git)
+models/           pesos fine-tuned (excluidos de git)
+label_studio/     tareas de anotación Cohen
+```
