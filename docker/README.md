@@ -29,8 +29,6 @@ Transferir los pesos desde la máquina local antes de levantar los contenedores:
 scp -i <clave.pem> -r models/task1_encoder/ ubuntu@<IP>:~/nlp-docs-cientificos-es/models/
 ```
 
-Los pesos se montan como volumen (`../models:/app/models`) para no requerir reconstruir la imagen cada vez que cambia un modelo.
-
 ```bash
 cd docker
 docker compose up --build -d
@@ -66,7 +64,7 @@ docker compose logs -f api
 docker compose logs -f demo
 ```
 
-Si el disco está lleno por capas Docker antiguas (sucede con t3.small y PyTorch):
+Si el disco está lleno por capas Docker antiguas:
 
 ```bash
 docker system prune -a -f
@@ -107,7 +105,7 @@ El frontend resuelve el backend por DNS interno de Docker Compose como `http://a
 |------|----|----|--------|
 | `commercial-api-gemini` | Gemini 2.5 Flash, few-shot k=3 (Macro F1=0.497) | Gemini 2.5 Flash, zero-shot | Activo |
 | `encoder-scibeto` | SciBETO fine-tuned (Sergio) en `models/task1_encoder/` | Pendiente | T1 activo, T2 sin artefacto |
-| `openweight` | LLaMA 3 vía Ollama | LLaMA 3 vía Ollama | Requiere t3.large — t3.small no tiene RAM para el modelo 8B |
+| `openweight` | LLaMA 3 vía Ollama | LLaMA 3 vía Ollama | Requiere instancia con >2 GB RAM |
 
 ---
 

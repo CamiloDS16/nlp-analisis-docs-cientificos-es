@@ -52,6 +52,20 @@ como_correr_notebook_colab.txt
 .mypy_cache/
 .ruff_cache/
 
-# ── Archivos locales de referencia (no van al repo) ───────────────────────────
+# Resultados y predicciones intermedias
+predictions_*.csv
+summary_*.csv
+results*.csv
+dvc_registro_*.txt
+
+# docs: solo el informe va al repo
+docs/*.md
+docs/*.txt
+docs/*.csv
+
+# Notebooks sueltos en models/
+models/*.ipynb
+
+# Archivos locales de referencia
 notebooks/*-ORIGINAL.ipynb
 .claude/
