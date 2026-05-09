@@ -20,12 +20,9 @@ git clone <repo_url> && cd nlp-docs-cientificos-es
 
 # Crear .env
 echo "GOOGLE_API_KEY=<clave>" > .env
-
-cd docker
-docker compose up --build -d
 ```
 
-Transferir los pesos desde la máquina local antes de levantar los contenedores (o con los contenedores detenidos):
+Transferir los pesos desde la máquina local antes de levantar los contenedores:
 
 ```bash
 # Desde la máquina local
@@ -33,6 +30,18 @@ scp -i <clave.pem> -r models/task1_encoder/ ubuntu@<IP>:~/nlp-docs-cientificos-e
 ```
 
 Los pesos se montan como volumen (`../models:/app/models`) para no requerir reconstruir la imagen cada vez que cambia un modelo.
+
+```bash
+cd docker
+docker compose up --build -d
+```
+
+Verificar que los dos contenedores están corriendo y el backend responde:
+
+```bash
+docker compose ps
+curl -s localhost:8000/health
+```
 
 ---
 
@@ -50,6 +59,13 @@ Si cambiaron dependencias:
 git pull && docker compose up --build -d
 ```
 
+Para ver logs en tiempo real:
+
+```bash
+docker compose logs -f api
+docker compose logs -f demo
+```
+
 Si el disco está lleno por capas Docker antiguas (sucede con t3.small y PyTorch):
 
 ```bash
@@ -64,7 +80,7 @@ docker system prune -a -f
 Puerto 8501  →  demo  (python:3.11-slim, sin imagen custom)
                   │  POST /analyze, /compare
               http://api:8000
-Port 8000    →  api   (imagen desde docker/Dockerfile)
+Puerto 8000  →  api   (imagen desde docker/Dockerfile)
                   ├── Gemini 2.5 Flash  — via GOOGLE_API_KEY en .env
                   ├── Encoder T1        — models/task1_encoder/ (volumen)
                   └── Encoder T2        — models/task2_encoder/ (volumen)
@@ -89,7 +105,7 @@ El frontend resuelve el backend por DNS interno de Docker Compose como `http://a
 
 | Slot | T1 | T2 | Estado |
 |------|----|----|--------|
-| `commercial-api-gemini` | Gemini 2.5 Flash, few-shot k=3 | Gemini 2.5 Flash, zero-shot | Activo |
+| `commercial-api-gemini` | Gemini 2.5 Flash, configuración seleccionada en A6 | Gemini 2.5 Flash, zero-shot | Activo |
 | `encoder-scibeto` | SciBETO fine-tuned (Sergio) en `models/task1_encoder/` | Pendiente | T1 activo, T2 sin artefacto |
 | `openweight` | LLaMA 3 vía Ollama | LLaMA 3 vía Ollama | Requiere t3.large — t3.small no tiene RAM para el modelo 8B |
 
