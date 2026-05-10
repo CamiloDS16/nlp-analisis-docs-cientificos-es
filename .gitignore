@@ -13,6 +13,7 @@ data/**/*.txt
 
 # ── Entornos virtuales ────────────────────────────────────────────────────────
 .env
+.env.example
 .envrc
 venv/
 .venv/
