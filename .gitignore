@@ -38,6 +38,10 @@ build/
 models/**/*.pt
 models/**/*.bin
 models/**/*.safetensors
+models/**/*.joblib
+models/**/*.pkl
+models/T1_MODEL_COMERCIAL/
+models/T2_MODEL_COMERCIAL/
 
 # ── macOS ─────────────────────────────────────────────────────────────────────
 .DS_Store
@@ -67,6 +71,21 @@ docs/*.csv
 # Notebooks sueltos en models/
 models/*.ipynb
 
+# Notebooks sueltos en la raíz (experimentos, pruebas, copias locales)
+/*.ipynb
+
 # Archivos locales de referencia
 notebooks/*-ORIGINAL.ipynb
 .claude/
+
+# Datasets Cohen locales (trabajo de anotación, no van al repo)
+DATASET_COHEN*.xlsx
+DATASET_COHEN*.csv
+
+# Chat del equipo
+_chat.txt
+
+# Archivos de trabajo sueltos en la raíz
+/*.xlsx
+/*.csv
+explicacion_despliegue.txt

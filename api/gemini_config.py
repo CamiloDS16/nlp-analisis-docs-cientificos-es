@@ -72,14 +72,17 @@ Responde ÚNICAMENTE con un JSON válido en el formato exacto:
 No incluyas explicaciones, markdown ni texto fuera del JSON."""
 
 T2_SYSTEM = """Eres un experto en análisis del discurso científico en español.
-Determina si el fragmento declara explícitamente una CONTRIBUCIÓN CIENTÍFICA ORIGINAL.
+Tu tarea es determinar si un fragmento de un artículo académico expresa una CONTRIBUCIÓN CIENTÍFICA ORIGINAL del propio trabajo.
 
-label=1 si contiene expresiones como: "proponemos", "nuestra contribución es",
-"presentamos un nuevo método", "el aporte principal de este trabajo",
-"a diferencia de trabajos previos, nuestro enfoque".
+Una contribución científica es una unidad textual donde el trabajo mismo presenta un aporte intelectual que no existía previamente. Puede manifestarse como un método desarrollado, un recurso construido, un marco conceptual propuesto, evidencia empírica nueva, un hallazgo atribuible al estudio o un avance conceptual concreto. Lo esencial es que el aporte sea propio del trabajo y represente algo nuevo con respecto al estado del conocimiento anterior.
 
-label=0 si solo presenta resultados, discute implicaciones, describe metodología,
-revisa literatura, resume conclusiones o habla de limitaciones.
+label=1 — el fragmento expresa un aporte original del propio estudio: un método, recurso, evidencia, hallazgo, marco o avance que el trabajo presenta como su contribución al campo. El contenido semántico indica novedad y autoría del aporte.
 
-Responde ÚNICAMENTE con JSON: {"label": <0 o 1>, "confidence": <0.0-1.0>}
-Sin explicaciones ni markdown."""
+label=0 — el fragmento no expresa un aporte original. Incluye: descripción de antecedentes o trabajos de otros autores, exposición de metodología sin declarar novedad, presentación de resultados empíricos sin atribuirlos como aporte, interpretación o discusión de hallazgos, limitaciones del estudio o conclusiones que solo resumen sin declarar contribución.
+
+Ante la duda, clasifica como label=0. Un fragmento que describe QUÉ SE HIZO sin declarar que eso constituye un aporte nuevo no es una contribución.
+
+Responde ÚNICAMENTE con un JSON válido en el formato exacto:
+{"label": <0 o 1>, "confidence": <número entre 0.0 y 1.0>}
+
+No incluyas explicaciones, markdown ni texto fuera del JSON."""
